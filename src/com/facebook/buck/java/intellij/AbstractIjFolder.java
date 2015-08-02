@@ -18,6 +18,7 @@ package com.facebook.buck.java.intellij;
 
 import com.facebook.buck.util.immutables.BuckStyleImmutable;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableSortedSet;
 
 import org.immutables.value.Value;
@@ -102,7 +103,7 @@ abstract class AbstractIjFolder {
   }
 
   public IjFolder merge(IjFolder otherFolder) {
-    Preconditions.checkArgument(otherFolder.getPath().equals(getPath()));
+    Preconditions.checkArgument(getPath().startsWith(otherFolder.getPath()));
 
     return otherFolder
         .withWantsPackagePrefix(getWantsPackagePrefix() || otherFolder.getWantsPackagePrefix())
