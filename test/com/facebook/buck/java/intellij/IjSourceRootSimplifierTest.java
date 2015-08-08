@@ -32,7 +32,7 @@ import org.junit.Test;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-public class IjFolderPackageGrouperTest {
+public class IjSourceRootSimplifierTest {
 
   private static IjFolder buildFolder(String path, AbstractIjFolder.Type type) {
     return IjFolder.builder()
@@ -104,7 +104,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder left = buildSourceFolder("src/left");
     IjFolder right = buildSourceFolder("src/right");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(left, right),
         fakePackageFinder());
 
@@ -117,7 +117,7 @@ public class IjFolderPackageGrouperTest {
   public void testSinglePathElement() {
     IjFolder src = buildSourceFolder("src");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(src),
         fakePackageFinder());
 
@@ -130,7 +130,7 @@ public class IjFolderPackageGrouperTest {
   public void testComplexPathElement() {
     IjFolder src = buildSourceFolder("src/a/b/c/d");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(src),
         fakePackageFinder());
 
@@ -144,7 +144,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder leftSource = buildSourceFolder("src/left");
     IjFolder rightTest = buildTestFolder("src/right");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(leftSource, rightTest),
         fakePackageFinder());
 
@@ -161,7 +161,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder acTest = buildTestFolder("a/c");
     IjFolder adaTest = buildTestFolder("a/d/a");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(aaaSource, aabSource, abSource, acTest, adaTest),
         fakePackageFinder());
 
@@ -177,7 +177,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder leftSource = buildSourceFolder("src/left");
     IjFolder rightSource = buildTestFolder("src/right");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(leftSource, rightSource),
         fakePackageFinder(
             ImmutableMap.of(
@@ -194,7 +194,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder aSource = buildSourceFolder("x/a/a");
     IjFolder bSource = buildSourceFolder("x/a/b");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(aSource, bSource),
         fakePackageFinder(
             ImmutableMap.of(
@@ -218,7 +218,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder aExclude = buildExcludeFolder("src/a");
     IjFolder aaExclude = buildExcludeFolder("src/a/a");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(leftSource, aExclude, aaExclude),
         fakePackageFinder());
 
@@ -233,7 +233,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder aaFolder = buildNoPrefixSourceFolder("src/a/a");
     IjFolder bFolder = buildNoPrefixSourceFolder("src/b");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(aFolder, aaFolder, bFolder),
         fakePackageFinder());
 
@@ -248,7 +248,7 @@ public class IjFolderPackageGrouperTest {
     IjFolder aaFolder = buildSourceFolder("src/a/a");
     IjFolder bFolder = buildNoPrefixSourceFolder("src/b");
 
-    ImmutableSet<IjFolder> mergedFolders = IjFolderPackageGrouper.mergeSourceFolders(
+    ImmutableSet<IjFolder> mergedFolders = IjSourceRootSimplifier.simplify(
         ImmutableSet.of(aFolder, aaFolder, bFolder),
         fakePackageFinder());
 

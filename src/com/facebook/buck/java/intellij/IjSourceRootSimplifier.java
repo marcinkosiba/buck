@@ -17,7 +17,6 @@
 package com.facebook.buck.java.intellij;
 
 import com.facebook.buck.graph.MutableDirectedGraph;
-import com.facebook.buck.io.MorePaths;
 import com.facebook.buck.java.JavaPackageFinder;
 import com.google.common.base.Function;
 import com.google.common.base.Optional;
@@ -37,9 +36,9 @@ import java.util.Map;
  * Groups {@link IjFolder}s into sets which are of the same type and belong to the same package
  * structure.
  */
-public abstract class IjFolderPackageGrouper {
+public abstract class IjSourceRootSimplifier {
 
-  public static ImmutableSet<IjFolder> mergeSourceFolders(
+  public static ImmutableSet<IjFolder> simplify(
       ImmutableSet<IjFolder> folders,
       JavaPackageFinder packageFinder) {
 
@@ -47,8 +46,7 @@ public abstract class IjFolderPackageGrouper {
     Map<Path, IjFolder> mergePathsMap = new HashMap<>();
     MutableDirectedGraph<Path> trie = new MutableDirectedGraph<>();
 
-    ParsingJavaPackageFinder.PackagePathCache packagePathCache =
-        new ParsingJavaPackageFinder.PackagePathCache();
+    PackagePathCache packagePathCache = new PackagePathCache(folders, packageFinder);
 
     for (IjFolder folder : folders) {
       if (folder.getType() == AbstractIjFolder.Type.EXCLUDE_FOLDER) {
@@ -56,12 +54,6 @@ public abstract class IjFolderPackageGrouper {
         // possible depth.
         mergedFolders.add(folder);
       } else {
-        if (folder.getWantsPackagePrefix()) {
-          Path pathToLookUp = pathForPackageLookup(folder);
-          Path packageFolder = packageFinder.findJavaPackageFolder(pathToLookUp);
-          packagePathCache.insert(pathToLookUp, packageFolder);
-        }
-
         mergePathsMap.put(folder.getPath(), folder);
 
         Path path = folder.getPath();
@@ -86,15 +78,11 @@ public abstract class IjFolderPackageGrouper {
         .build();
   }
 
-  private static Path pathForPackageLookup(IjFolder folder) {
-   return FluentIterable.from(folder.getInputs()).first().or(folder.getPath().resolve("notfound"));
-  }
-
   private static Optional<IjFolder> walkTrie(
       Path path,
       final MutableDirectedGraph<Path> trie,
       final Map<Path, IjFolder> mergePathsMap,
-      final ParsingJavaPackageFinder.PackagePathCache packagePathCache) {
+      final PackagePathCache packagePathCache) {
     ImmutableList<Optional<IjFolder>> children =
         FluentIterable.from(trie.getOutgoingNodesFor(path))
             .transform(
@@ -154,7 +142,7 @@ public abstract class IjFolderPackageGrouper {
   private static boolean canMerge(
       IjFolder parent,
       IjFolder child,
-      ParsingJavaPackageFinder.PackagePathCache packagePathCache) {
+      PackagePathCache packagePathCache) {
     Preconditions.checkArgument(child.getPath().startsWith(parent.getPath()));
 
     if (parent.getType() != child.getType()) {
@@ -164,13 +152,12 @@ public abstract class IjFolderPackageGrouper {
       return false;
     }
     if (parent.getWantsPackagePrefix()) {
-      Optional<Path> parentPackageOptional = packagePathCache.lookup(
-          parent.getPath().resolve("notfound"));
+      Optional<Path> parentPackageOptional = packagePathCache.lookup(parent);
       if (!parentPackageOptional.isPresent()) {
         return false;
       }
       Path parentPackage = parentPackageOptional.get();
-      Path childPackage = packagePathCache.lookup(child.getPath().resolve("notfound")).get();
+      Path childPackage = packagePathCache.lookup(child).get();
 
       int pathDifference = child.getPath().getNameCount() - parent.getPath().getNameCount();
       Preconditions.checkState(pathDifference > 0);
@@ -183,6 +170,33 @@ public abstract class IjFolderPackageGrouper {
       }
     }
     return true;
+  }
+
+  private static class PackagePathCache {
+    ParsingJavaPackageFinder.PackagePathCache delegate;
+
+    public PackagePathCache(
+        ImmutableSet<IjFolder> startingFolders,
+        JavaPackageFinder javaPackageFinder) {
+      delegate = new ParsingJavaPackageFinder.PackagePathCache();
+      for (IjFolder startingFolder : startingFolders) {
+        if (!startingFolder.getWantsPackagePrefix()) {
+          continue;
+        }
+        Path path = FluentIterable.from(startingFolder.getInputs())
+            .first()
+            .or(lookupPath(startingFolder));
+        delegate.insert(path, javaPackageFinder.findJavaPackageFolder(path));
+      }
+    }
+
+    private Path lookupPath(IjFolder folder) {
+      return folder.getPath().resolve("notfound");
+    }
+
+    public Optional<Path> lookup(IjFolder folder) {
+      return delegate.lookup(lookupPath(folder));
+    }
   }
 
 }
