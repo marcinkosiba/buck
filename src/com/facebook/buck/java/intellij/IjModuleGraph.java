@@ -20,6 +20,7 @@ import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.rules.TargetGraph;
 import com.facebook.buck.rules.TargetNode;
 import com.google.common.base.Function;
+import com.google.common.base.Functions;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
@@ -81,6 +82,12 @@ public class IjModuleGraph {
     }
   }
 
+  public enum ModuleAggregationMode {
+    AUTO,
+    DEEP,
+    SHALLOw
+  }
+
   /**
    * Create all the modules we are capable of representing in IntelliJ from the supplied graph.
    *
@@ -91,18 +98,20 @@ public class IjModuleGraph {
    */
   public static ImmutableMap<BuildTarget, IjModule> createModules(
       TargetGraph targetGraph,
-      IjModuleFactory moduleFactory) {
+      IjModuleFactory moduleFactory,
+      Function<Path, Path> moduleBasePathTransform) {
     ImmutableSet<TargetNode<?>> supportedTargets = FluentIterable.from(targetGraph.getNodes())
         .filter(IjModuleFactory.SUPPORTED_MODULE_TYPES_PREDICATE)
         .toSet();
+    Function<TargetNode<?>, Path> moduleBasePathFunction = new Function<TargetNode<?>, Path>() {
+      @Override
+      public Path apply(TargetNode<?> input) {
+        return input.getBuildTarget().getBasePath();
+      }
+    };
     ImmutableListMultimap<Path, TargetNode<?>> baseTargetPathMultimap =
         FluentIterable.from(supportedTargets).index(
-            new Function<TargetNode<?>, Path>() {
-              @Override
-              public Path apply(TargetNode<?> input) {
-                return input.getBuildTarget().getBasePath();
-              }
-            });
+            Functions.compose(moduleBasePathTransform, moduleBasePathFunction));
 
     ImmutableMap.Builder<BuildTarget, IjModule> moduleMapBuilder = new ImmutableMap.Builder<>();
 
@@ -120,8 +129,38 @@ public class IjModuleGraph {
     return moduleMapBuilder.build();
   }
 
+  public static Function<Path, Path> getModuleBasePathTransform(
+      int graphSize,
+      ModuleAggregationMode aggregationMode) {
+    final int minShallowGraphSize = 500;
+    final int shallowMaxPathLength = 3;
+    if (aggregationMode == ModuleAggregationMode.AUTO) {
+      aggregationMode = graphSize > minShallowGraphSize ?
+          ModuleAggregationMode.SHALLOw :
+          ModuleAggregationMode.DEEP;
+    }
+
+    if (aggregationMode == ModuleAggregationMode.DEEP) {
+      return Functions.identity();
+    } else {
+      Preconditions.checkState(aggregationMode == ModuleAggregationMode.SHALLOw);
+      return new Function<Path, Path>() {
+        @Override
+        public Path apply(@Nullable Path input) {
+          if (input == null || input.getNameCount() <= shallowMaxPathLength) {
+            return input;
+          }
+          return input.subpath(0, shallowMaxPathLength);
+        }
+      };
+    }
+  }
+
   /**
    * @param targetGraph input graph.
+   * @param libraryFactory library factory.
+   * @param moduleFactory module factory.
+   * @param moduleAggregationMode module aggregation mode.
    * @return module graph corresponding to the supplied {@link TargetGraph}. Multiple targets from
    * the same base path are mapped to a single module, therefore an IjModuleGraph edge
    * exists between two modules (Ma, Mb) if a TargetGraph edge existed between a pair of
@@ -130,9 +169,13 @@ public class IjModuleGraph {
   public static IjModuleGraph from(
       final TargetGraph targetGraph,
       final IjLibraryFactory libraryFactory,
-      final IjModuleFactory moduleFactory) {
+      final IjModuleFactory moduleFactory,
+      ModuleAggregationMode moduleAggregationMode) {
+    Function<Path, Path> moduleBasePathTransform = getModuleBasePathTransform(
+        targetGraph.getNodes().size(),
+        ModuleAggregationMode.SHALLOw);
     final ImmutableMap<BuildTarget, IjModule> rulesToModules =
-        createModules(targetGraph, moduleFactory);
+        createModules(targetGraph, moduleFactory, moduleBasePathTransform);
     final ExportedDepsClosureResolver exportedDepsClosureResolver =
         new ExportedDepsClosureResolver(targetGraph);
     ImmutableMap.Builder<IjProjectElement, ImmutableMap<IjProjectElement, DependencyType>>

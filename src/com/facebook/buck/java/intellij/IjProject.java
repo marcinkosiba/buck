@@ -111,7 +111,8 @@ public class IjProject {
     IjModuleGraph moduleGraph = IjModuleGraph.from(
         targetGraphAndTargets.getTargetGraph(),
         libraryFactory,
-        moduleFactory);
+        moduleFactory,
+        IjModuleGraph.ModuleAggregationMode.AUTO);
     ParsingJavaPackageFinder parsingJavaPackageFinder = new ParsingJavaPackageFinder(
         javaFileParser,
         projectFilesystem,

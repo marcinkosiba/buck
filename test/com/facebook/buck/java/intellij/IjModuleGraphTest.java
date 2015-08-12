@@ -482,7 +482,8 @@ public class IjModuleGraphTest {
     return IjModuleGraph.from(
         TargetGraphFactory.newInstance(targets),
         libraryFactory,
-        moduleFactory);
+        moduleFactory,
+        IjModuleGraph.ModuleAggregationMode.DEEP);
   }
 
   public static IjProjectElement getProjectElementForTarget(
