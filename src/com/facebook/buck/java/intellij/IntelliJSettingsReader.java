@@ -39,9 +39,9 @@ import java.util.List;
 /**
  * Reads IntelliJ settings.
  */
-public class IntelliJConfigReader {
+public class IntelliJSettingsReader {
 
-  private static Logger LOG = Logger.get(IntelliJConfigReader.class);
+  private static Logger LOG = Logger.get(IntelliJSettingsReader.class);
 
   private static ImmutableMap<Platform, String> CONFIG_FOLDER_PATTERNS =
       ImmutableMap.of(
@@ -54,7 +54,7 @@ public class IntelliJConfigReader {
   private Path ijSettingsFolder;
   private Supplier<Boolean> isAndroidPluginDisabled;
 
-  public IntelliJConfigReader(ProjectFilesystem projectFilesystem, Path ijSettingsFolder) {
+  public IntelliJSettingsReader(ProjectFilesystem projectFilesystem, Path ijSettingsFolder) {
     this.projectFilesystem = projectFilesystem;
     this.ijSettingsFolder = ijSettingsFolder.toAbsolutePath();
     this.isAndroidPluginDisabled = Suppliers.memoize(
@@ -66,16 +66,14 @@ public class IntelliJConfigReader {
         });
   }
 
-  public static Optional<IntelliJConfigReader> create(
+  public static Optional<IntelliJSettingsReader> create(
       final ProjectFilesystem projectFilesystem,
-      Optional<Path> ijHomeFromEnv,
-      Optional<Path> ijHomeFromCommandLine,
-      Path userHome) {
-    Optional<Path> ijSettingsFolder = ijHomeFromCommandLine.or(ijHomeFromEnv);
+      Optional<Path> ijSettingsFolder,
+      Path userHomeAbsolutePath) {
     if (!ijSettingsFolder.isPresent() || !ijSettingsFolder.get().toFile().isDirectory()) {
       PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher(
           CONFIG_FOLDER_PATTERNS.get(Platform.detect()));
-      File[] homeFolderContents = userHome.toFile().listFiles();
+      File[] homeFolderContents = userHomeAbsolutePath.toFile().listFiles();
       Arrays.sort(homeFolderContents, Collections.reverseOrder());
       for (File file : homeFolderContents) {
         Path candidate = file.toPath();
@@ -87,10 +85,10 @@ public class IntelliJConfigReader {
     }
     return ijSettingsFolder
         .transform(
-            new Function<Path, IntelliJConfigReader>() {
+            new Function<Path, IntelliJSettingsReader>() {
               @Override
-              public IntelliJConfigReader apply(Path input) {
-                return new IntelliJConfigReader(projectFilesystem, input);
+              public IntelliJSettingsReader apply(Path input) {
+                return new IntelliJSettingsReader(projectFilesystem, input);
               }
             });
   }
@@ -117,7 +115,7 @@ public class IntelliJConfigReader {
                 }
               });
     } catch (IOException e) {
-      LOG.error(e, "Problem reading disabled plugins list.");
+      LOG.warn(e, "Problem reading disabled plugins list.");
       return false;
     }
   }
