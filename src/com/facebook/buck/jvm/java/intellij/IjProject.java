@@ -31,6 +31,7 @@ import com.facebook.buck.rules.SourcePath;
 import com.facebook.buck.rules.SourcePathResolver;
 import com.facebook.buck.rules.TargetGraphAndTargets;
 import com.facebook.buck.rules.TargetNode;
+import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableSet;
 
@@ -113,8 +114,16 @@ public class IjProject {
           }
 
           @Override
-          public Path getAndroidManifestPath(TargetNode<AndroidBinaryDescription.Arg> targetNode) {
-            return sourcePathResolver.deprecatedGetPath(targetNode.getConstructorArg().manifest);
+          public Optional<Path> getAndroidManifestPath(TargetNode<?> targetNode) {
+            return targetNode.castArg(AndroidBinaryDescription.Arg.class)
+                    .transform(
+                        new Function<TargetNode<AndroidBinaryDescription.Arg>, Path>() {
+                          @Override
+                          public Path apply(TargetNode<AndroidBinaryDescription.Arg> input) {
+                            return sourcePathResolver.getAbsolutePath(
+                                input.getConstructorArg().manifest);
+                          }
+                        });
           }
 
           @Override
@@ -144,10 +153,12 @@ public class IjProject {
                 .transform(sourcePathResolver.deprecatedPathFunction());
           }
         };
+    IjAndroidManifestDeterminator androidManifestDeterminator =
+        new IjAndroidManifestDeterminator(targetGraphAndTargets.getTargetGraph());
     IjModuleGraph moduleGraph = IjModuleGraph.from(
         targetGraphAndTargets.getTargetGraph(),
         libraryFactory,
-        new IjModuleFactory(moduleFactoryResolver),
+        new IjModuleFactory(moduleFactoryResolver, androidManifestDeterminator),
         aggregationMode);
     JavaPackageFinder parsingJavaPackageFinder = ParsingJavaPackageFinder.preparse(
         javaFileParser,

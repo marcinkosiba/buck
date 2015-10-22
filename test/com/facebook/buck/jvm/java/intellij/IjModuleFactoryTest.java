@@ -31,6 +31,7 @@ import com.facebook.buck.jvm.java.JavaTestBuilder;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.model.BuildTargetFactory;
 import com.facebook.buck.rules.SourcePath;
+import com.facebook.buck.rules.TargetGraph;
 import com.facebook.buck.rules.TargetNode;
 import com.facebook.buck.rules.TestSourcePath;
 import com.facebook.buck.rules.coercer.SourceWithFlags;
@@ -451,9 +452,11 @@ public class IjModuleFactoryTest {
           }
 
           @Override
-          public Path getAndroidManifestPath(
-              TargetNode<AndroidBinaryDescription.Arg> targetNode) {
-            return ((TestSourcePath) targetNode.getConstructorArg().manifest).getRelativePath();
+          public Optional<Path> getAndroidManifestPath(
+              TargetNode<?> targetNode) {
+            AndroidBinaryDescription.Arg constructorArg =
+                (AndroidBinaryDescription.Arg) targetNode.getConstructorArg();
+            return Optional.of(((TestSourcePath) constructorArg.manifest).getRelativePath());
           }
 
           @Override
@@ -473,7 +476,8 @@ public class IjModuleFactoryTest {
               TargetNode<AndroidResourceDescription.Arg> targetNode) {
             return Optional.absent();
           }
-        });
+        },
+        new IjAndroidManifestDeterminator(TargetGraph.EMPTY));
   }
 
   @Test

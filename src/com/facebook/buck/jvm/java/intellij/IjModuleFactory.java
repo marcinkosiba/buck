@@ -88,7 +88,7 @@ public class IjModuleFactory {
      * @param targetNode node describing the Android binary to get the manifest of.
      * @return path on disk to the AndroidManifest.
      */
-    Path getAndroidManifestPath(TargetNode<AndroidBinaryDescription.Arg> targetNode);
+    Optional<Path> getAndroidManifestPath(TargetNode<?> targetNode);
 
     /**
      * @param targetNode node describing the Android binary to get the Proguard config of.
@@ -258,11 +258,15 @@ public class IjModuleFactory {
 
   private final Map<BuildRuleType, IjModuleRule<?>> moduleRuleIndex = new HashMap<>();
   private final IjModuleFactoryResolver moduleFactoryResolver;
+  private final IjAndroidManifestDeterminator androidManifestDeterminator;
 
   /**
    * @param moduleFactoryResolver see {@link IjModuleFactoryResolver}.
+   * @param androidManifestDeterminator see {@link IjAndroidManifestDeterminator}
    */
-  public IjModuleFactory(IjModuleFactoryResolver moduleFactoryResolver) {
+  public IjModuleFactory(
+      IjModuleFactoryResolver moduleFactoryResolver,
+      IjAndroidManifestDeterminator androidManifestDeterminator) {
     addToIndex(new AndroidBinaryModuleRule());
     addToIndex(new AndroidLibraryModuleRule());
     addToIndex(new AndroidResourceModuleRule());
@@ -272,6 +276,7 @@ public class IjModuleFactory {
     addToIndex(new RobolectricTestModuleRule());
 
     this.moduleFactoryResolver = moduleFactoryResolver;
+    this.androidManifestDeterminator = androidManifestDeterminator;
 
     Preconditions.checkState(
         moduleRuleIndex.keySet().equals(SUPPORTED_MODULE_TYPES));
@@ -400,6 +405,15 @@ public class IjModuleFactory {
         isTest ? IjModuleGraph.DependencyType.TEST : IjModuleGraph.DependencyType.PROD);
   }
 
+  private void determineAndroidManifest(TargetNode<?> targetNode, ModuleBuildContext context) {
+    Optional<TargetNode<?>> manifestHolder = androidManifestDeterminator.getManifestHolder(
+        targetNode);
+    if (manifestHolder.isPresent()) {
+      context.getOrCreateAndroidFacetBuilder().setManifestPath(
+          moduleFactoryResolver.getAndroidManifestPath(manifestHolder.get()));
+    }
+  }
+
   private static <T extends JavaLibraryDescription.Arg> void addCompiledShadowIfNeeded(
       TargetNode<T> targetNode,
       ModuleBuildContext context) {
@@ -452,6 +466,8 @@ public class IjModuleFactory {
         context.addExtraClassPathDependency(dummyRDotJavaClassPath.get());
       }
       context.ensureAndroidFacetBuilder();
+
+      determineAndroidManifest(target, context);
     }
   }
 
@@ -478,6 +494,8 @@ public class IjModuleFactory {
       }
       androidFacetBuilder.addAllResourcePaths(
           moduleFactoryResolver.getAndroidResourcePath(target).asSet());
+
+      determineAndroidManifest(target, context);
     }
   }
 
@@ -498,7 +516,7 @@ public class IjModuleFactory {
     }
   }
 
-  private static class JavaLibraryModuleRule implements IjModuleRule<JavaLibraryDescription.Arg> {
+  private class JavaLibraryModuleRule implements IjModuleRule<JavaLibraryDescription.Arg> {
 
     @Override
     public BuildRuleType getType() {
@@ -513,10 +531,12 @@ public class IjModuleFactory {
           true /* wantsPackagePrefix */,
           context);
       addCompiledShadowIfNeeded(target, context);
+
+      determineAndroidManifest(target, context);
     }
   }
 
-  private static class JavaTestModuleRule implements IjModuleRule<JavaTestDescription.Arg> {
+  private class JavaTestModuleRule implements IjModuleRule<JavaTestDescription.Arg> {
 
     @Override
     public BuildRuleType getType() {
@@ -531,10 +551,12 @@ public class IjModuleFactory {
           true /* wantsPackagePrefix */,
           context);
       addCompiledShadowIfNeeded(target, context);
+
+      determineAndroidManifest(target, context);
     }
   }
 
-  private static class RobolectricTestModuleRule extends JavaTestModuleRule {
+  private class RobolectricTestModuleRule extends JavaTestModuleRule {
 
     @Override
     public BuildRuleType getType() {

@@ -21,8 +21,10 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
+import com.facebook.buck.android.AndroidBinaryBuilder;
 import com.facebook.buck.android.AndroidBinaryDescription;
 import com.facebook.buck.android.AndroidLibraryBuilder;
+import com.facebook.buck.android.AndroidLibraryDescription;
 import com.facebook.buck.android.AndroidResourceDescription;
 import com.facebook.buck.jvm.java.JavaLibraryBuilder;
 import com.facebook.buck.jvm.java.JavaTestBuilder;
@@ -32,7 +34,9 @@ import com.facebook.buck.model.BuildTargetFactory;
 import com.facebook.buck.rules.BuildRuleResolver;
 import com.facebook.buck.rules.SourcePath;
 import com.facebook.buck.rules.SourcePathResolver;
+import com.facebook.buck.rules.TargetGraph;
 import com.facebook.buck.rules.TargetNode;
+import com.facebook.buck.rules.TestSourcePath;
 import com.facebook.buck.shell.GenruleBuilder;
 import com.facebook.buck.testutil.TargetGraphFactory;
 import com.google.common.base.Function;
@@ -43,6 +47,7 @@ import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSortedSet;
 
 import org.hamcrest.Matchers;
 import org.junit.Test;
@@ -460,6 +465,41 @@ public class IjModuleGraphTest {
         ImmutableMap.of(rDotJavaLibrary, IjModuleGraph.DependencyType.PROD));
   }
 
+  @Test
+  public void androidFacetManifests() {
+    TargetNode<AndroidLibraryDescription.Arg> binaryDepLib = AndroidLibraryBuilder.createBuilder(
+        BuildTargetFactory.newInstance("//binary_dep_lib:binary_dep_lib"))
+        .addSrc(Paths.get("java/binary_dep_lib/File.java"))
+        .build();
+    TargetNode<AndroidLibraryDescription.Arg> lib = AndroidLibraryBuilder.createBuilder(
+        BuildTargetFactory.newInstance("//lib:lib"))
+        .addSrc(Paths.get("java/lib/File.java"))
+        .build();
+    TargetNode<AndroidBinaryDescription.Arg> binary = AndroidBinaryBuilder.createBuilder(
+        BuildTargetFactory.newInstance("//binary:binary"))
+        .setOriginalDeps(ImmutableSortedSet.of(binaryDepLib.getBuildTarget()))
+        .setManifest(new TestSourcePath("TestAndroidManifest.xml"))
+        .build();
+
+    Path binaryManifestPath = Paths.get("BinaryMainfest.xml");
+    IjModuleGraph moduleGraph = createModuleGraph(
+        ImmutableSet.of(binaryDepLib, lib, binary),
+        ImmutableMap.<TargetNode<?>, Path>of(),
+        ImmutableMap.<TargetNode<?>, Path>of(binary, binaryManifestPath),
+        Functions.constant(Optional.<Path>absent()),
+        IjModuleGraph.AggregationMode.NONE);
+
+    assertThat(
+        getModuleForTarget(moduleGraph, binary).getAndroidFacet().get().getManifestPath(),
+        Matchers.equalTo(Optional.of(binaryManifestPath)));
+    assertThat(
+        getModuleForTarget(moduleGraph, binaryDepLib).getAndroidFacet().get().getManifestPath(),
+        Matchers.equalTo(Optional.of(binaryManifestPath)));
+    assertThat(
+        getModuleForTarget(moduleGraph, lib).getAndroidFacet().get().getManifestPath(),
+        Matchers.equalTo(Optional.<Path>absent()));
+  }
+
 
   public void doSingleAggregationModePathFunctionTest(
       IjModuleGraph.AggregationMode aggregationMode,
@@ -580,6 +620,20 @@ public class IjModuleGraphTest {
       final ImmutableMap<TargetNode<?>, Path> javaLibraryPaths,
       final Function<? super TargetNode<?>, Optional<Path>> rDotJavaClassPathResolver,
       IjModuleGraph.AggregationMode aggregationMode) {
+    return createModuleGraph(
+        targets,
+        javaLibraryPaths,
+        ImmutableMap.<TargetNode<?>, Path>of(),
+        rDotJavaClassPathResolver,
+        aggregationMode);
+  }
+
+  public static IjModuleGraph createModuleGraph(
+      ImmutableSet<TargetNode<?>> targets,
+      final ImmutableMap<TargetNode<?>, Path> javaLibraryPaths,
+      final ImmutableMap<TargetNode<?>, Path> manifestPaths,
+      final Function<? super TargetNode<?>, Optional<Path>> rDotJavaClassPathResolver,
+      IjModuleGraph.AggregationMode aggregationMode) {
     final SourcePathResolver sourcePathResolver = new SourcePathResolver(new BuildRuleResolver());
     DefaultIjLibraryFactory.IjLibraryFactoryResolver sourceOnlyResolver =
         new DefaultIjLibraryFactory.IjLibraryFactoryResolver() {
@@ -593,6 +647,7 @@ public class IjModuleGraphTest {
             return Optional.fromNullable(javaLibraryPaths.get(targetNode));
           }
         };
+    TargetGraph targetGraph = TargetGraphFactory.newInstance(targets);
     IjModuleFactory moduleFactory = new IjModuleFactory(
         new IjModuleFactory.IjModuleFactoryResolver() {
           @Override
@@ -601,8 +656,8 @@ public class IjModuleGraphTest {
           }
 
           @Override
-          public Path getAndroidManifestPath(TargetNode<AndroidBinaryDescription.Arg> targetNode) {
-            return Paths.get("TestAndroidManifest.xml");
+          public Optional<Path> getAndroidManifestPath(TargetNode<?> targetNode) {
+            return Optional.fromNullable(manifestPaths.get(targetNode));
           }
 
           @Override
@@ -622,10 +677,11 @@ public class IjModuleGraphTest {
               TargetNode<AndroidResourceDescription.Arg> targetNode) {
             return Optional.absent();
           }
-        });
+        },
+        new IjAndroidManifestDeterminator(targetGraph));
     IjLibraryFactory libraryFactory = new DefaultIjLibraryFactory(sourceOnlyResolver);
     return IjModuleGraph.from(
-        TargetGraphFactory.newInstance(targets),
+        targetGraph,
         libraryFactory,
         moduleFactory,
         aggregationMode);
